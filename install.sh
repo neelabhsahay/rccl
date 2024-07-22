@@ -28,6 +28,7 @@ npkit_enabled=false
 run_tests=false
 run_tests_all=false
 time_trace=false
+poller_offload=false
 
 # #################################################
 # helper functions
@@ -58,6 +59,7 @@ function display_help()
     echo "       --static                Build RCCL as a static library instead of shared library"
     echo "    -t|--tests_build           Build rccl unit tests, but do not run"
     echo "       --time-trace            Plot the build time of RCCL"
+    echo "    -x|--poller-offload        Build RCCL with poller offload enabled"
     echo "       --verbose               Show compile commands"
 }
 
@@ -68,7 +70,7 @@ function display_help()
 # check if we have a modern version of getopt that can handle whitespace and long parameters
 getopt -T
 if [[ $? -eq 4 ]]; then
-    GETOPT_PARSE=$(getopt --name "${0}" --options dfhij:lprt --longoptions address-sanitizer,build_allreduce_only,dependencies,debug,enable_backtrace,disable-colltrace,disable-msccl-kernel,fast,help,install,jobs:,local_gpu_only,no_clean,npkit-enable,package_build,prefix:,rm-legacy-include-dir,run_tests_all,run_tests_quick,static,tests_build,time-trace,verbose -- "$@")
+    GETOPT_PARSE=$(getopt --name "${0}" --options dfhij:lprtx --longoptions address-sanitizer,build_allreduce_only,dependencies,debug,enable_backtrace,disable-colltrace,disable-msccl-kernel,fast,help,install,jobs:,local_gpu_only,no_clean,npkit-enable,package_build,prefix:,rm-legacy-include-dir,run_tests_all,run_tests_quick,static,tests_build,poller-proxy,time-trace,verbose -- "$@")
 else
     echo "Need a new version of getopt"
     exit 1
@@ -104,6 +106,7 @@ while true; do
          --run_tests_all)            run_tests=true; run_tests_all=true;                                                               shift ;;
          --static)                   build_static=true;                                                                                shift ;;
     -t | --tests_build)              build_tests=true;                                                                                 shift ;;
+    -x | --poller-offload)           poller_offload=true;                                                                                  shift ;;
          --time-trace)               time_trace=true;                                                                                  shift ;;
          --verbose)                  build_verbose=1;                                                                                  shift ;;
     --) shift ; break ;;
@@ -213,6 +216,11 @@ fi
 
 if [[ "${msccl_kernel_enabled}" == false ]]; then
     cmake_common_options="${cmake_common_options} -DENABLE_MSCCL_KERNEL=OFF"
+fi
+
+# Compile with poller_proxy
+if ($poller_offload); then
+    cmake_common_options="${cmake_common_options} -DPEN_PROXY_OFFLOAD=1"
 fi
 
 # Install dependencies

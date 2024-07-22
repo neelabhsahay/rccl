@@ -41,8 +41,13 @@ static ncclResult_t ncclNet_v4_as_v6_getProperties(int dev, ncclNetProperties_v6
   return ncclSuccess;
 }
 
+#ifndef PEN_PROXY_OFFLOAD
 static ncclResult_t ncclNet_v4_as_v6_isend(void* sendComm, void* data, int size, int tag, void* mhandle, void** request) {
   return ncclNet_v4->isend(sendComm, data, size, mhandle, request);
+#else
+static ncclResult_t ncclNet_v4_as_v6_isend(void* sendComm, void* data, int size, int tag, void* mhandle, void** request, uint32_t flags) {
+  return ncclNet_v4->isend(sendComm, data, size, mhandle, request);
+#endif
 }
 
 static ncclResult_t ncclNet_v4_as_v6_irecv(void* recvComm, int n, void** data, int* sizes, int* tags, void** mhandles, void** request) {
@@ -93,7 +98,9 @@ static ncclResult_t ncclNet_v5_as_v6_init(ncclDebugLogger_t logfn) {
   ncclNet_v5_as_v6.regMr = ncclNet_v5->regMr;
   ncclNet_v5_as_v6.regMrDmaBuf = NULL;
   ncclNet_v5_as_v6.deregMr = ncclNet_v5->deregMr;
+#ifndef PEN_PROXY_OFFLOAD
   ncclNet_v5_as_v6.isend = ncclNet_v5->isend;
+#endif
   ncclNet_v5_as_v6.irecv = ncclNet_v5->irecv;
   ncclNet_v5_as_v6.iflush = ncclNet_v5->iflush;
   ncclNet_v5_as_v6.test = ncclNet_v5->test;

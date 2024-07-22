@@ -537,7 +537,11 @@ ncclResult_t ncclNetSocketRegMr(void* comm, void* data, int size, int type, void
 }
 ncclResult_t ncclNetSocketDeregMr(void* comm, void* mhandle) { return ncclSuccess; }
 
+#ifndef PEN_PROXY_OFFLOAD
 ncclResult_t ncclNetSocketIsend(void* sendComm, void* data, int size, int tag, void* mhandle, void** request) {
+#else
+ncclResult_t ncclNetSocketIsend(void* sendComm, void* data, int size, int tag, void* mhandle, void** request, uint32_t flags) {
+#endif
   struct ncclNetSocketComm* comm = (struct ncclNetSocketComm*)sendComm;
   NCCLCHECK(ncclNetSocketGetRequest(comm, NCCL_SOCKET_SEND, data, size, (struct ncclNetSocketRequest**)request));
   return ncclSuccess;

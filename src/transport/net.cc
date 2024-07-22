@@ -1021,6 +1021,10 @@ static ncclResult_t sendProxyProgress(struct ncclProxyState* proxyState, struct 
           bool shared = (p == NCCL_PROTO_SIMPLE) && resources->shared;
           char* buff = shared ? localBuff+resources->recvMem->offsFifo[buffSlot] : localBuff+buffSlot*stepSize;
           int ready = 1;
+        #ifndef PEN_PROXY_OFFLOAD
+        #else
+          uint32_t flag;
+        #endif
           if (p == NCCL_PROTO_LL128) {
             ready = resources->useGdr;
             if (!ready) {
@@ -1035,6 +1039,7 @@ static ncclResult_t sendProxyProgress(struct ncclProxyState* proxyState, struct 
               }
             }
           } else if (p == NCCL_PROTO_LL) {
+          #ifndef PEN_PROXY_OFFLOAD
             uint32_t flag = NCCL_LL_FLAG(sub->base+sub->transmitted+1);
             int nFifoLines = DIVUP(size, sizeof(union ncclLLFifoLine));
             union ncclLLFifoLine* lines = (union ncclLLFifoLine*)buff;
@@ -1043,6 +1048,11 @@ static ncclResult_t sendProxyProgress(struct ncclProxyState* proxyState, struct 
               volatile uint32_t *f2 = &lines[i].flag2;
               if (f1[0] != flag || f2[0] != flag) { ready = 0; break; }
             }
+          #else
+             flag = NCCL_LL_FLAG(sub->base+sub->transmitted+1);
+             INFO(NCCL_NET, "No of subs %d size %d localBuff %p stepSize %d flag %d",
+                  args->nsubs, size, localBuff, stepSize, flag);
+          #endif
           }
           if (ready) {
             // flush HDP if not done
@@ -1051,7 +1061,11 @@ static ncclResult_t sendProxyProgress(struct ncclProxyState* proxyState, struct 
               *resources->curr_hdp_reg = 1;
             }
             // Data is ready, try to send.
+        #ifndef PEN_PROXY_OFFLOAD
             NCCLCHECK(proxyState->ncclNet->isend(resources->netSendComm, buff, size, resources->tpRank, mhandle, sub->requests+buffSlot));
+        #else
+            NCCLCHECK(proxyState->ncclNet->isend(resources->netSendComm, buff, size, resources->tpRank, mhandle, sub->requests+buffSlot, flag));
+        #endif
             if (sub->requests[buffSlot] != NULL) {
 
 #if defined(ENABLE_NPKIT) && defined(ENABLE_NPKIT_EVENT_NET_SEND_ENTRY) && defined(ENABLE_NPKIT_EVENT_NET_SEND_EXIT)

@@ -467,7 +467,12 @@ struct ncclIbSendComm {
   uint64_t fifoHead;
   struct ncclIbRequest* fifoReqs[MAX_REQUESTS][NCCL_NET_IB_MAX_RECVS];
   struct ibv_send_wr wrs[NCCL_NET_IB_MAX_RECVS+1];
+  #ifndef PEN_PROXY_OFFLOAD
   struct ibv_sge sges[NCCL_NET_IB_MAX_RECVS];
+  #else
+  struct ibv_sge sges[NCCL_NET_IB_MAX_RECVS*2];
+  uint32_t poll_flags;
+  #endif
   struct ncclSocket sock;
 
   int ready;
@@ -1009,12 +1014,18 @@ ncclResult_t ncclIbMultiSend(struct ncclIbSendComm* comm, int slot) {
 
   uint64_t wr_id = 0ULL;
 
+  INFO(NCCL_NET|NCCL_ENV, "Number of request Send %d", nreqs);
   for (int r=0; r<nreqs; r++) {
     struct ibv_send_wr* wr = comm->wrs+r;
     memset(wr, 0, sizeof(struct ibv_send_wr));
 
+  #ifndef PEN_PROXY_OFFLOAD
     struct ibv_sge* sge = comm->sges+r;
+  #else
+    struct ibv_sge* sge = comm->sges+(r*2);
+  #endif
     sge->addr=(uintptr_t)reqs[r]->send.data;
+    INFO(NCCL_NET|NCCL_ENV, "Req no %d size %d", r, reqs[r]->send.size);
     sge->lkey=reqs[r]->send.lkey;
 
     wr->opcode = IBV_WR_RDMA_WRITE;
@@ -1065,8 +1076,15 @@ ncclResult_t ncclIbMultiSend(struct ncclIbSendComm* comm, int slot) {
         comm->wrs[r].sg_list = NULL;
         comm->wrs[r].num_sge = 0;
       } else {
+        INFO(NCCL_NET|NCCL_ENV, "QPs no %d Reqs No %d size %d", q, r, length);
+      #ifndef PEN_PROXY_OFFLOAD
         comm->sges[r].length = length;
         comm->wrs[r].sg_list = comm->sges+r;
+      #else
+        // send two sges the second one carries the flags to be polled for
+        comm->sges[r*2].length = length;
+        comm->wrs[r].sg_list = comm->sges+(r*2);
+      #endif
         comm->wrs[r].num_sge = 1;
       }
     }
@@ -1077,7 +1095,11 @@ ncclResult_t ncclIbMultiSend(struct ncclIbSendComm* comm, int slot) {
     for (int r=0; r<nreqs; r++) {
       int chunkSize = DIVUP(DIVUP(reqs[r]->send.size, nqps), align) * align;
       reqs[r]->send.offset += chunkSize;
+    #ifndef PEN_PROXY_OFFLOAD
       comm->sges[r].addr += chunkSize;
+    #else
+      comm->sges[r*2].addr += chunkSize;
+    #endif
       comm->wrs[r].wr.rdma.remote_addr += chunkSize;
     }
   }
@@ -1085,7 +1107,11 @@ ncclResult_t ncclIbMultiSend(struct ncclIbSendComm* comm, int slot) {
   return ncclSuccess;
 }
 
+#ifndef PEN_PROXY_OFFLOAD
 ncclResult_t ncclIbIsend(void* sendComm, void* data, int size, int tag, void* mhandle, void** request) {
+#else
+ncclResult_t ncclIbIsend(void* sendComm, void* data, int size, int tag, void* mhandle, void** request, uint32_t flags) {
+#endif
   struct ncclIbSendComm* comm = (struct ncclIbSendComm*)sendComm;
   if (comm->ready == 0) { WARN("NET/IB: ncclIbIsend() called when comm->ready == 0"); return ncclInternalError; }
   if (comm->ready == 0) { *request = NULL; return ncclSuccess; }
@@ -1107,6 +1133,10 @@ ncclResult_t ncclIbIsend(void* sendComm, void* data, int size, int tag, void* mh
   __sync_synchronize(); // order the nreqsPtr load against tag/rkey/addr loads below
   for (int r=0; r<nreqs; r++) {
     if (reqs[r] != NULL || slots[r].tag != tag) continue;
+  #ifndef PEN_PROXY_OFFLOAD
+  #else
+    comm->sges[(r*2)+1].length = flags;
+  #endif
 
     // Sanity checks to catch user collective call count/size mismatches
     if (size > slots[r].size) {

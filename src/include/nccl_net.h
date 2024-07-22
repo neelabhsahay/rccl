@@ -70,7 +70,11 @@ typedef struct {
   ncclResult_t (*deregMr)(void* comm, void* mhandle);
   // Asynchronous send to a peer.
   // May return request == NULL if the call cannot be performed (or would block)
+  #ifndef PEN_PROXY_OFFLOAD
   ncclResult_t (*isend)(void* sendComm, void* data, int size, int tag, void* mhandle, void** request);
+  #else
+  ncclResult_t (*isend)(void* sendComm, void* data, int size, int tag, void* mhandle, void** request, uint32_t flags);
+  #endif
   // Asynchronous recv from a peer.
   // May return request == NULL if the call cannot be performed (or would block)
   ncclResult_t (*irecv)(void* recvComm, int n, void** data, int* sizes, int* tags, void** mhandles, void** request);
