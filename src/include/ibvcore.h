@@ -645,7 +645,12 @@ enum ibv_send_flags {
 	IBV_SEND_FENCE		= 1 << 0,
 	IBV_SEND_SIGNALED	= 1 << 1,
 	IBV_SEND_SOLICITED	= 1 << 2,
+#ifndef PEN_PROXY_OFFLOAD
 	IBV_SEND_INLINE		= 1 << 3
+#else
+    IBV_SEND_INLINE		= 1 << 3,
+    IBV_SEND_POL_PROXY  = 1 << 5
+#endif
 };
 
 struct ibv_sge {

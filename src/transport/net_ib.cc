@@ -1029,7 +1029,11 @@ ncclResult_t ncclIbMultiSend(struct ncclIbSendComm* comm, int slot) {
     sge->lkey=reqs[r]->send.lkey;
 
     wr->opcode = IBV_WR_RDMA_WRITE;
+  #ifndef PEN_PROXY_OFFLOAD
     wr->send_flags = 0;
+  #else
+    wr->send_flags = IBV_SEND_POL_PROXY;
+  #endif
     wr->wr.rdma.remote_addr = slots[r].addr;
     wr->wr.rdma.rkey = slots[r].rkey;
     wr->next = wr+1;
@@ -1063,7 +1067,12 @@ ncclResult_t ncclIbMultiSend(struct ncclIbSendComm* comm, int slot) {
   lastWr->opcode = IBV_WR_RDMA_WRITE_WITH_IMM;
   lastWr->imm_data = immData;
   lastWr->next = NULL;
+#ifndef PEN_PROXY_OFFLOAD
   lastWr->send_flags = IBV_SEND_SIGNALED;
+#else
+  lastWr->send_flags |= IBV_SEND_SIGNALED;
+#endif
+
 
   // Multi-QP: make sure IB writes are multiples of 128B so that LL and LL128 protocols still work
   const int align = 128;
